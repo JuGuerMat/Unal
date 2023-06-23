@@ -26,7 +26,7 @@
      dP_in = 0.1;
      
      % Concentraciones molares iniciales:
-     y_Ain = 0.2; y_Cin = 0.001; y_Din = 0.002; y_Ein = 0.008; 
+     y_Ain = 0.2; y_Cin = 0.001; y_Din = 0.02; y_Ein = 0.008; 
      y_Bin = (1 - y_Ain - y_Cin - y_Din - y_Ein) * 0.21; y_Fin = (1 - y_Ain - y_Cin - y_Din - y_Ein) * 0.79;
 
      % Flujos másicos (fr [kg / s]) y molares (FR [mol / s]) iniciales:
@@ -58,7 +58,7 @@
      A_transi = pi() * di^2 * 0.25;
      do = 2.54 / 100; % [m]
      d = do - di; % [m]
-     Lmax = 5; % [m]
+     Lmax = 20; % [m]
 
 % Características del Sistema del Lecho:
      dp = 0.4 / 100; % [m]
@@ -73,8 +73,8 @@
 
 % ESTABLECIMIENTO RESOLUCIÓN DE SISTEMA DE ECUACIONES CON SOLVER ODE15S: https://www.mathworks.com/help/matlab/ref/ode15s.html
      y = [0, 0, 0, 0, 0, 0];
-     Lmax = 5;
-     tspan = linspace(0, Lmax, 2000); % Intervalo de evaluación
+     Lmax = 2.5;
+     tspan = linspace(0, Lmax, 20000); % Intervalo de evaluación
      % CI = [FR_Ain; FR_Ein; T_rin; T_sin; T_cin; PR_in]; % Condiciones Iniciales
      CI = [FR_Ain; FR_Ein; T_rin; T_cin; PR_in]; % Condiciones Iniciales
      y = CI;
@@ -86,32 +86,114 @@
           % Para expresiones Algebráicas: 0 = ...
 
      for i = 1 : length(Y')
-          VFRA(i) = Y(i, 1);
-          VFRE(i) = Y(i, 2);
-          VTR(i) = Y(i, 3);
-          VTC(i) = Y(i, 4);
-          VPR(i) = Y(i, 5);
+          VFR_A(i) = Y(i, 1); % Flujo de Metanol
+          VFR_E(i) = Y(i, 2); % Flujo de CO
+          VT_r(i) = Y(i, 3); % Temperatura de R
+          VT_c(i) = Y(i, 4); % Temperatura de C
+          VPR(i) = Y(i, 5) / 1000; % Presión del FLuido de Reaccion
      end
 
-     subplot(3, 2, 1);
-     plot(X, VFRA);
-     hold on;
-     subplot(3, 2, 2);
-     plot(X, VFRE);
-     hold on;
-     subplot(3, 2, 3);
-     plot(X, VTR);
-     hold on;
-     subplot(3, 2, 4);
-     plot(X, VTC);
-     hold on;
-     subplot(3, 2, 5);
-     plot(X, VTS);
-     hold on;
-     subplot(3, 2, 6);
-     plot(X, VPR);
-     hold on; 
-     
+% Relaciones Estequiométricas y Flujos Molares:
+     % Variables Independientes: FR_A, FR_E:
+     FR_A = y(1);
+     FR_E = y(2);
+
+     for i = 1 : length (VFR_A)
+          VE1(i) = FR_Ain - VFR_A(i); % Avance de Reacción 1 en función de Metanol (A)
+          VE2(i) = FR_Ein - VFR_E(i); % Avance de Reacción 2 en función de Monóxido de Carbono (
+          VFR_B(i) = FR_Bin - 0.5 * VE1(i) - 0.5 * VE2(i); % Concentración de Oxígeno (B)
+          VFR_C(i) = FR_Cin + VE1(i) - VE2(i); % Concentración de Formaldehído (C)
+          VFR_D(i) = FR_Din + VE1(i) + VE2(i); % Concentración de Agua (D)  
+          VFR_F(i) = FR_Fin; % Concentración de Nitrógeno (F)
+          VFR_R(i) = VFR_A(i) + VFR_B(i) + VFR_C(i) + VFR_D(i) + VFR_E(i) + VFR_F(i);
+
+          VQ(i) = Q_in * (VFR_R(i) / FR_in) * (VT_r(i) / T_rin) * (PR_in / VPR(i));
+
+          VConv_A(i) = (FR_Ain - VFR_A(i)) / FR_Ain;
+          VRend_C(i) = (VE1(i) - VE2(i)) / (VE1(i));
+
+          VConc_A(i) = VFR_A(i) / VQ(i);
+          VConc_B(i) = VFR_B(i) / VQ(i);
+          VConc_C(i) = VFR_C(i) / VQ(i);
+          VConc_D(i) = VFR_D(i) / VQ(i);
+          VConc_E(i) = VFR_E(i) / VQ(i);
+          VConc_F(i) = VFR_F(i) / VQ(i);
+          VConc_R(i) = VFR_R(i) / VQ(i);
+
+     end 
+
+     Graficas = 2;
+
+     switch(Graficas)
+          case 1
+               subplot(2, 2, 1);
+               plot(X, VConv_A, '-', 'linewidth', 2);
+               hold on;
+               xlabel("Distancia de Reactor [m]")
+               ylabel("Conversión")
+               title("Conversión de Metanol Respecto a Longitud de Reactor")
+               grid on;
+          
+               subplot(2, 2, 2);
+               plot(X, VRend_C, '-', 'linewidth', 2);
+               hold on;
+               xlabel("Distancia de Reactor [m]")
+               ylabel("Rendimiento")
+               title("Rendimiento de Formaldehído Respecto a Longitud de Reactor")
+               grid on;
+          
+               subplot(2, 2, 3);
+               plot(X, VFR_A, '-', 'linewidth', 2); hold on;
+               plot(X, VFR_B, '-', 'linewidth', 2); hold on;
+               plot(X, VFR_C, '-', 'linewidth', 2); hold on;
+               plot(X, VFR_D, '-', 'linewidth', 2); hold on;
+               plot(X, VFR_E, '-', 'linewidth', 2); hold on;
+               plot(X, VFR_F, '-', 'linewidth', 2); hold on;
+               plot(X, VFR_R, '-', 'linewidth', 2); hold on;
+               xlabel("Distancia de Reactor [m]")
+               ylabel("Flujo molar [mol /s]")
+               title("Flujos Molares de Reacción Respecto a Longitud de Reactor")
+               legend("Metanol", "Oxígeno", "Formaldehído", "Agua", "Monóxido de Carbono", "Nitrógeno", "Flujo Total")
+               grid on;
+          
+               subplot(2, 2, 4);
+               plot(X, VConc_A, '-', 'linewidth', 2); hold on;
+               plot(X, VConc_B, '-', 'linewidth', 2); hold on;
+               plot(X, VConc_C, '-', 'linewidth', 2); hold on;
+               plot(X, VConc_D, '-', 'linewidth', 2); hold on;
+               plot(X, VConc_E, '-', 'linewidth', 2); hold on;
+               plot(X, VConc_F, '-', 'linewidth', 2); hold on;
+               plot(X, VConc_R, '-', 'linewidth', 2); hold on;
+               xlabel("Distancia de Reactor [m]")
+               ylabel("Concentracion molar [mol / m3]")
+               title("Concentraciones de Flujo de Reacción Respecto a Longitud de Reactor")
+               legend("Metanol", "Oxígeno", "Formaldehído", "Agua", "Monóxido de Carbono", "Nitrógeno", "Flujo Total")
+               grid on;
+          case 2
+               subplot(1, 2, 1)
+               plot(X, VT_r, 'linewidth', 2); hold on;
+               plot(X, VT_c, 'linewidth', 2); hold on;
+               xlabel("Distancia de Reactor [m]")
+               ylabel("Temperatura [K]")
+               title("Temperaturas de Flujos de Reacción y de Control Respecto a Longitud de Reactor")
+               legend("Fluido de Reacción", "Fluido de Control")
+               grid on;
+
+               subplot(1, 2, 2)
+               plot(X, VPR, 'linewidth', 2); hold on;
+               xlabel("Distancia de Reactor [m]")
+               ylabel("Presión [kpa]")
+               title("Presión en las Tuberías de Flujo de Reacción Respecto a Longitud de Reactor")
+               grid on;
+     end
+
+% A: Metanol (CH3OH)
+% B: Oxígeno (O2)
+% C: Formaldehído (CH2O)
+% D: Agua (H2O)
+% E: Monóxido de Carbono (CO)
+% F: Nitrógeno (N2)
+% G: Fluido de Control
 
 % PLANTEAMIENTO DE SOLUCIÓN DE ECUACIONES:
 function Ec = Derivadas(x, y)
@@ -155,7 +237,6 @@ function Ec = Derivadas(x, y)
 % Fluido de Control: 
      % Referencia: HP Hytherm 600 (https://www.hplubricants.in/products/specialties/thermic-fluids/hytherm-500-and-600-thermic-fluid-oil)
      f_G = 0.5; % [kg / s]
-     U = 200; % [W / m2 s]
      T_cin = 300; % [K]
      T_cout = 350; % [K]
      CondTerm_G = 0.090 / 1.1629999998093; % [W / m K]
@@ -166,15 +247,18 @@ function Ec = Derivadas(x, y)
      A_transi = pi() * ((di^2) / 4); % [m]
      do = 2.54 / 100; % [m]
      d = do - di; % [m]
+     MLDd = (do - di) / log(do / di);
      Lmax = 5; % [m]
+     Censu = 0.01 / 5.67826334106816;
+     CondTerm_Tubo = 16.20; % [W / m2 K]
 
 % Características del Sistema del Lecho:
      dp = 0.4 / 100; % [m]
      Ro_p = 1.892 * 1000; % [kg / m3]
      ap = (6 / dp) * 1/Ro_p; % [m2 particula / m3 lecho]
      Vacio = 0.390 + (1.740 / ((di/dp) + 1.140)^2);
-     NR_s = 4.5; % [kg / m2 s]
-     f_s = NR_s * A_transi; % [kg / s]
+     NR_G = 4.5; % [kg / m2 s]
+     f_s = NR_G * A_transi; % [kg / s]
      T_sin = 300; % [K]
      h_calor = 0.01;
      Ro_Lecho = (1 - Vacio) * Ro_p; % [kg / m3]
@@ -189,42 +273,6 @@ function Ec = Derivadas(x, y)
      PR = dP;
 
      T_s = 580;
-
-% Coeficientes de Capacidad Calorífica. Obtenidos de "Principios Elementales de los Procesos Químicos - Felder" - Tabla B.2 (Todos menos G)
-     C1_A = (+42.93 * 10^-3); C2_A = (+8.3010 * 10^-5); C3_A = (-1.8700 * 10^-8); C4_A = (-8.030 * 10^-12); % [KJ / mol K]
-     C1_B = (+29.10 * 10^-3); C2_B = (+1.1580 * 10^-5); C3_B = (-0.6076 * 10^-8); C4_B = (+1.311 * 10^-12); % [KJ / mol K]
-     C1_C = (+34.28 * 10^-3); C2_C = (+4.2680 * 10^-5); C3_C = (+0.0000 * 10^-8); C4_C = (-8.694 * 10^-12); % [KJ / mol K]
-     C1_D = (+33.46 * 10^-3); C2_D = (+0.6880 * 10^-5); C3_D = (+0.7604 * 10^-8); C4_D = (-3.593 * 10^-12); % [KJ / mol K]
-     C1_E = (+28.95 * 10^-3); C2_E = (+0.4110 * 10^-5); C3_E = (+0.3548 * 10^-8); C4_E = (-2.220 * 10^-12); % [KJ / mol K]
-     C1_F = (+29.00 * 10^-3); C2_F = (+0.2199 * 10^-5); C3_F = (+0.5723 * 10^-8); C4_F = (-2.871 * 10^-12); % [KJ / mol K]
-     C1_G = (0.184355); C2_G = (+1.025 * 10^-3); % [Kg / mol K]
-
-% Calores Específicos y deltas CP [J /mol K]:
-     Cp_A = (C1_A + C2_A * (T_r-273.15) + C3_A * (T_r-273.15)^2 + C4_A * (T_r-273.15)^3) * 1000;
-     Cp_B = (C1_B + C2_B * (T_r-273.15) + C3_B * (T_r-273.15)^2 + C4_B * (T_r-273.15)^3) * 1000;
-     Cp_C = (C1_C + C2_C * (T_r-273.15) + C3_C * (T_r-273.15)^2 + C4_C * (T_r-273.15)^3) * 1000;
-     Cp_D = (C1_D + C2_D * (T_r-273.15) + C3_D * (T_r-273.15)^2 + C4_D * (T_r-273.15)^3) * 1000;
-     Cp_E = (C1_E + C2_E * (T_r-273.15) + C3_E * (T_r-273.15)^2 + C4_E * (T_r-273.15)^3) * 1000;
-     Cp_F = (C1_F + C2_F * (T_r-273.15) + C3_F * (T_r-273.15)^2 + C4_F * (T_r-273.15)^3) * 1000;
-     Cp_G =  C1_G + C2_G * (y(5)); 
-
-     DCP_1 = (C1_D + C1_C - 0.5 * C1_B - C1_A) + (C2_D + C2_C - 0.5 * C2_B - C2_A) * (T_r-273.15) + ...
-             (C3_D + C3_C - 0.5 * C3_B - C3_A) * (T_r-273.15)^2 + (C4_D + C4_C - 0.5 * C4_B - C4_A) * (T_r-273.15)^3;
-     DCP_2 = (C1_E + C1_D - 0.5 * C1_B - C1_C) + (C2_E + C2_D - 0.5 * C2_B - C2_C) * (T_r-273.15) + ...
-             (C3_E + C3_D - 0.5 * C3_B - C3_C) * (T_r-273.15)^2 + (C4_E + C4_D - 0.5 * C4_B - C4_C) * (T_r-273.15)^3;
-
-% Entalpía de Reacción [J / mol]:
-     EntR1 = ((-115.90 - 241.83) - (-201.20 + 0.5 * 0)) + ...
-             ((C1_D + C1_C - 0.5 * C1_B - C1_A) * (T_r-273.15) + (C2_D + C2_C - 0.5 * C2_B - C2_A)/2 * (T_r-273.15)^2 + ...
-             (C3_D + C3_C - 0.5 * C3_B - C3_A)/3 * (T_r-273.15)^3 + (C4_D + C4_C - 0.5 * C4_B - C4_A)/4 * (T_r-273.15)^4) - ...
-             (((C1_D + C1_C - 0.5 * C1_B - C1_A) * (25) + (C2_D + C2_C - 0.5 * C2_B - C2_A)/2 * (25)^2 + ...
-             (C3_D + C3_C - 0.5 * C3_B - C3_A)/3 * (25)^3 + (C4_D + C4_C - 0.5 * C4_B - C4_A)/4 * (25)^4));
-
-     EntR2 = ((-110.52 - 241.83) - (-115.90 + 0.5 * 0)) + ...
-             ((C1_E + C1_D - 0.5 * C1_B - C1_C) * (T_r-273.15) + (C2_E + C2_D - 0.5 * C2_B - C2_C)/2 * (T_r-273.15)^2 + ...
-             (C3_E + C3_D - 0.5 * C3_B - C3_C)/3 * (T_r-273.15)^3 + (C4_E + C4_D - 0.5 * C4_B - C4_C)/4 * (T_r-273.15)^4) - ...
-             ((C1_E + C1_D - 0.5 * C1_B - C1_C) * (25) + (C2_E + C2_D - 0.5 * C2_B - C2_C)/2 * (25)^2 + ...
-             (C3_E + C3_D - 0.5 * C3_B - C3_C)/3 * (25)^3 + (C4_E + C4_D - 0.5 * C4_B - C4_C)/4 * (25)^4);
 
 % Cinéticas de Reacción: 
      k1 = A_k1 * exp(-Eact_k1 / (ConstR * T_s));
@@ -261,7 +309,7 @@ function Ec = Derivadas(x, y)
      NR_D = fR_D / A_transi; 
      NR_E = fR_E / A_transi; 
      NR_F = fR_F / A_transi; 
-     NR = NR_A + NR_B + NR_C + NR_D + NR_E + NR_F; 
+     NR_R = NR_A + NR_B + NR_C + NR_D + NR_E + NR_F; 
 
 % Concentraciones másicas de reacción (x):
      x_A = fR_A / fR; 
@@ -278,6 +326,7 @@ function Ec = Derivadas(x, y)
      y_D = FR_D / FR; 
      y_E = FR_E / FR; 
      y_F = FR_F / FR;
+     PM_R = y_A * PM_A + y_B * PM_B + y_C * PM_C  + y_D * PM_D + y_E * PM_E + y_F * PM_F;
 
 % Caudales de reacción (Q) [m3 / s]:
      Q = Q_in * (FR / FR_in) * (T_r / T_rin) * (PR_in / PR);
@@ -310,7 +359,7 @@ function Ec = Derivadas(x, y)
 
      Ro_R = 1 / (x_A / Ro_A + x_B / Ro_B + x_C / Ro_C + x_D / Ro_D + x_E / Ro_E + x_F / Ro_F);
 
-     Vel_s = NR_s * Ro_R;
+     Vel_s = NR_G * Ro_R;
 
 % Conversión de Flujos Molares a Concentraciones [mol / m3]:
      CR_A = FR_A / Q; 
@@ -328,11 +377,65 @@ function Ec = Derivadas(x, y)
      Mu_E = 0.00004160 * T_r + (+0.005100); 
      Mu_F = 0.00004160 * T_r + (+0.005100);
      
-     Mu_R = 1 / (x_A / Mu_A + x_B / Mu_B + x_C/ Mu_C + ...
-               x_D / Mu_D + x_E / Mu_E + x_F / Mu_F);
+     Mu_R = 1 / (x_A / Mu_A + x_B / Mu_B + x_C/ Mu_C + x_D / Mu_D + x_E / Mu_E + x_F / Mu_F);
+
+% Conductividades:
+     CondTerm_A = 5 * 10^-7 * T_r^2 - 0.0002 * T_r + 0.0284;
+     CondTerm_B = 1 * 10^-5 * T_r^2 - 0.0018 * T_r + 0.0758;
+     CondTerm_C = 5 * 10^-7 * T_r^2 - 0.0002 * T_r + 0.0284;
+     CondTerm_D = 1 * 10^-6 * T_r^2 - 0.0011 * T_r + 0.2011;
+     CondTerm_E = 9 * 10^-6 * T_r^2 - 0.0014 * T_r + 0.0588;
+     CondTerm_F = 7 * 10^-6 * T_r^2 - 0.0010 * T_r + 0.0462;
+
+     CondTerm_R = x_A / CondTerm_A + x_B / CondTerm_B + x_C / CondTerm_C + x_D / CondTerm_D + x_E / CondTerm_E + x_F / CondTerm_F;
 
 % Factor de Caída de Presión:
-     f = (1 - Vacio) / (Vacio^3) * (1.75 + (150 * (1 - Vacio)) / (dp * NR / Mu_R));
+     f = (1 - Vacio) / (Vacio^3) * (1.75 + (150 * (1 - Vacio)) / (dp * NR_R / Mu_R));
+     Re_R = (dp * NR_R / Mu_R);
+
+% Coeficientes de Capacidad Calorífica. Obtenidos de "Principios Elementales de los Procesos Químicos - Felder" - Tabla B.2 (Todos menos G)
+     C1_A = (+42.93 * 10^-3); C2_A = (+8.3010 * 10^-5); C3_A = (-1.8700 * 10^-8); C4_A = (-8.030 * 10^-12); % [KJ / mol K]
+     C1_B = (+29.10 * 10^-3); C2_B = (+1.1580 * 10^-5); C3_B = (-0.6076 * 10^-8); C4_B = (+1.311 * 10^-12); % [KJ / mol K]
+     C1_C = (+34.28 * 10^-3); C2_C = (+4.2680 * 10^-5); C3_C = (+0.0000 * 10^-8); C4_C = (-8.694 * 10^-12); % [KJ / mol K]
+     C1_D = (+33.46 * 10^-3); C2_D = (+0.6880 * 10^-5); C3_D = (+0.7604 * 10^-8); C4_D = (-3.593 * 10^-12); % [KJ / mol K]
+     C1_E = (+28.95 * 10^-3); C2_E = (+0.4110 * 10^-5); C3_E = (+0.3548 * 10^-8); C4_E = (-2.220 * 10^-12); % [KJ / mol K]
+     C1_F = (+29.00 * 10^-3); C2_F = (+0.2199 * 10^-5); C3_F = (+0.5723 * 10^-8); C4_F = (-2.871 * 10^-12); % [KJ / mol K]
+     C1_G = (0.184355); C2_G = (+1.025 * 10^-3); % [Kg / mol K]
+
+% Calores Específicos y deltas CP [J /mol K]:
+     Cp_A = (C1_A + C2_A * (T_r-273.15) + C3_A * (T_r-273.15)^2 + C4_A * (T_r-273.15)^3) * 1000;
+     Cp_B = (C1_B + C2_B * (T_r-273.15) + C3_B * (T_r-273.15)^2 + C4_B * (T_r-273.15)^3) * 1000;
+     Cp_C = (C1_C + C2_C * (T_r-273.15) + C3_C * (T_r-273.15)^2 + C4_C * (T_r-273.15)^3) * 1000;
+     Cp_D = (C1_D + C2_D * (T_r-273.15) + C3_D * (T_r-273.15)^2 + C4_D * (T_r-273.15)^3) * 1000;
+     Cp_E = (C1_E + C2_E * (T_r-273.15) + C3_E * (T_r-273.15)^2 + C4_E * (T_r-273.15)^3) * 1000;
+     Cp_F = (C1_F + C2_F * (T_r-273.15) + C3_F * (T_r-273.15)^2 + C4_F * (T_r-273.15)^3) * 1000;
+     Cp_G =  C1_G + C2_G * (y(5));
+     Cp_R = 1 / (y_A / Cp_A + y_B / Cp_B + y_C / Cp_C + y_D / Cp_D + y_E / Cp_E + y_F / Cp_F);
+
+     DCP_1 = (C1_D + C1_C - 0.5 * C1_B - C1_A) + (C2_D + C2_C - 0.5 * C2_B - C2_A) * (T_r-273.15) + ...
+             (C3_D + C3_C - 0.5 * C3_B - C3_A) * (T_r-273.15)^2 + (C4_D + C4_C - 0.5 * C4_B - C4_A) * (T_r-273.15)^3;
+     DCP_2 = (C1_E + C1_D - 0.5 * C1_B - C1_C) + (C2_E + C2_D - 0.5 * C2_B - C2_C) * (T_r-273.15) + ...
+             (C3_E + C3_D - 0.5 * C3_B - C3_C) * (T_r-273.15)^2 + (C4_E + C4_D - 0.5 * C4_B - C4_C) * (T_r-273.15)^3;
+
+% Entalpía de Reacción [J / mol]:
+     EntR1 = ((-115.90 - 241.83) - (-201.20 + 0.5 * 0)) + ...
+             ((C1_D + C1_C - 0.5 * C1_B - C1_A) * (T_r-273.15) + (C2_D + C2_C - 0.5 * C2_B - C2_A)/2 * (T_r-273.15)^2 + ...
+             (C3_D + C3_C - 0.5 * C3_B - C3_A)/3 * (T_r-273.15)^3 + (C4_D + C4_C - 0.5 * C4_B - C4_A)/4 * (T_r-273.15)^4) - ...
+             (((C1_D + C1_C - 0.5 * C1_B - C1_A) * (25) + (C2_D + C2_C - 0.5 * C2_B - C2_A)/2 * (25)^2 + ...
+             (C3_D + C3_C - 0.5 * C3_B - C3_A)/3 * (25)^3 + (C4_D + C4_C - 0.5 * C4_B - C4_A)/4 * (25)^4));
+
+     EntR2 = ((-110.52 - 241.83) - (-115.90 + 0.5 * 0)) + ...
+             ((C1_E + C1_D - 0.5 * C1_B - C1_C) * (T_r-273.15) + (C2_E + C2_D - 0.5 * C2_B - C2_C)/2 * (T_r-273.15)^2 + ...
+             (C3_E + C3_D - 0.5 * C3_B - C3_C)/3 * (T_r-273.15)^3 + (C4_E + C4_D - 0.5 * C4_B - C4_C)/4 * (T_r-273.15)^4) - ...
+             ((C1_E + C1_D - 0.5 * C1_B - C1_C) * (25) + (C2_E + C2_D - 0.5 * C2_B - C2_C)/2 * (25)^2 + ...
+             (C3_E + C3_D - 0.5 * C3_B - C3_C)/3 * (25)^3 + (C4_E + C4_D - 0.5 * C4_B - C4_C)/4 * (25)^4);
+
+% Aspectos de calor y transferencia de masa 
+     Pr_R = Mu_R * Cp_R / CondTerm_R;
+     h_CalorPelI = (0.4 * Re_R^0.5 + 0.2 * Re_R ^ (2/3)) * Pr_R^0.4 * (1 - Vacio) / Vacio * CondTerm_R / dp;
+     h_CalorPelE = 0.2 * ((do * NR_G) / Mu_G)^0.6 * (Cp_G * Mu_G)^0.33 * CondTerm_R / do;
+     h_CalorR = 0.458 / Vacio * ((dp * NR_R / Mu_R) ^ -0.407) * (Cp_R * FR / PM_R) * ((Cp_R * Mu_R) / (CondTerm_R * PM_R)) ^ (-2/3);
+     U = 1 / (1 / h_CalorPelI * (d / CondTerm_Tubo) + (di / MLDd) * (1 / h_CalorPelE) + Censu); % [W / m2 s]
 
 % PAQUETE DE ECUACIONES DIFERENCIALES Y ALGEBRÁICAS:
 
@@ -341,31 +444,33 @@ function Ec = Derivadas(x, y)
 
      syms Balance(T_s)
 
-     Balance(T_s) = h_calor * ap * Ro_p * (T_s - T_r) - ...
+     Balance(T_s) = h_CalorR * ap * Ro_p * (T_s - T_r) - ...
            n1 * EntR1 * (k1 * (PR_in * y_Ain * (Q_Ain / Q_A) * (y(1) / FR_Ain) * (y(3)/T_rin))) / ...
            (1 + K1A * (PR_in * y_Ain * (Q_Ain / Q_A) * (y(1) / FR_Ain) * (y(3)/T_rin))) - ...
            n2 * EntR2 * ((k2) * (PR_in * y_Cin * (Q_Cin / Q_C) * (FR_C / FR_Cin) * (y(3)/T_rin))) / ...
            (1 + K2D * (PR_in * y_Din * (Q_Din / Q_D) * (FR_D / FR_Din) * (y(3)/T_rin)));
 
      T_s = vpasolve(Balance);
-
+    
 % Paquete de Ecuaciones: El Diferencial se encuentra despejado para ser solucionado:
+     Tubos = 293;
+
 % Variables: t: x, y(1): FR_A, y(2): FR_E, y(3) : Tr, y(4) : Tc, y(5): Ts, y(6) : P 
      Ec = zeros(5,1);
      % Ecuación 1: Balance de Materia de Metanol (A) - Se encuentra dFA / dx igualado a la expresión:
-     Ec1 = (k1 * (PR_in * y_Ain * (Q_Ain / Q_A) * (y(1) / FR_Ain) * (y(3)/T_rin))) / ...
-             (1 + K1A * (PR_in * y_Ain * (Q_Ain / Q_A) * (y(1) / FR_Ain) * (y(3)/T_rin))) * Ro_R * A_transi;
+     Ec1 = -(k1 * (PR_in * y_Ain * (Q_Ain / Q_A) * (y(1) / FR_Ain) * (y(3)/T_rin))) / ...
+             (1 + K1A * (PR_in * y_Ain * (Q_Ain / Q_A) * (y(1) / FR_Ain) * (y(3)/T_rin))) * Ro_R * A_transi * Tubos;
 
      % Ecuación 2: Balance de Materia de Monóxido de Carbono (E) - Se encuentra dFE / dx igualado a la expresión:
      Ec2 = (k2 * (PR_in * y_Cin * (Q_Cin / Q_C) * (FR_C / FR_Cin) * (y(3)/T_rin))) / ...
-             (1 + K2D * (PR_in * y_Din * (Q_Din / Q_D) * (FR_D / FR_Din) * (y(3)/T_rin))) * Ro_R * A_transi;
+             (1 + K2D * (PR_in * y_Din * (Q_Din / Q_D) * (FR_D / FR_Din) * (y(3)/T_rin))) * Ro_R * A_transi * Tubos;
 
      % Ecuación 3: Balance de Energía de Fluido de Reacción - Se encuentra dTr / dx igualado a la expresión:
-     Ec3 = (-h_calor * ap * Ro_Lecho * (y(3) - y(5)) * A_transi + U * pi() * do * (y(4) - y(3))) / ...
+     Ec3 = -(h_calor * ap * Ro_Lecho * (y(3) - y(5)) * A_transi + U * pi() * do * (y(4) - y(3))) / ...
              (FR_A * Cp_A + FR_B * Cp_B + FR_C * Cp_C + FR_D * Cp_D + FR_E * Cp_E + FR_F * Cp_F);
 
      % Ecuación 4: Balance de Energía de Fluido de Control: - Se encuentra dTc / dx igualado a la expresión:
-     Ec4 = (U * pi() * do * (y(4) - y(3))) / (f_G * Cp_G);
+     Ec4 = -(U * pi() * do * (y(4) - y(3))) / (f_G * Cp_G);
 
      % Ecuación 5: Balance de Presión - Se encuentra dPR / dz igualado a la expresión
      Ec5 = -f * Ro_R * Vel_s / dp;
@@ -374,4 +479,3 @@ function Ec = Derivadas(x, y)
      Ec = [Ec1; Ec2; Ec3; Ec4; Ec5];
 
 end
-
